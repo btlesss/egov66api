@@ -1,23 +1,7 @@
-from dataclasses import dataclass, asdict, fields, is_dataclass
+from dataclasses import dataclass
 from typing import Optional, List
 from enum import Enum
 from datetime import datetime
-
-
-def from_instance(klass, d):
-    try:
-        fieldtypes = {f.name: f.type for f in fields(klass)}
-        return klass(
-            **{
-                f: from_instance(fieldtypes[f], d[f])
-                if is_dataclass(fieldtypes[f])
-                else d[f]
-                for f in d
-            }
-        )
-    except:
-        raise ValueError(f"incorrect values for {klass.__name__}")
-
 
 ANY_SUBJECT = "00000000-0000-0000-0000-000000000000"
 
@@ -25,7 +9,11 @@ ANY_SUBJECT = "00000000-0000-0000-0000-000000000000"
 class AuthData:
     accessToken: str = ""
     refreshToken: str = ""
-    accessTokenExpirationDate: str = ""
+    accessTokenExpirationDate: datetime = ""
+
+    def __post_init__(self):
+        if not isinstance(self.accessTokenExpirationDate, datetime):
+            self.accessTokenExpirationDate = datetime.fromisoformat(self.accessTokenExpirationDate)
 
 
 @dataclass
@@ -72,6 +60,39 @@ class Announce:
 class Period:
     id: str
     name: str
+
+@dataclass
+class PaginationData:
+    pageNumber: int
+    totalPages: int
+    hasPreviousPage: bool
+    hasNextPage: bool
+
+class GradesType(Enum):
+    PERIOD = "periodGradesTable"
+    WEEK = "weekGradesTable"
+    YEAR = "weekGradesTable"
+
+def _parse_valued_timestamp(date: str, hour: int, minute: int) -> datetime:
+    date = datetime.fromisoformat(date)
+    return date.replace(hour=hour, minute=minute)
+
+class WeekGrades:
+    @dataclass
+    class Lesson:
+        beginDate: datetime
+        endDate: datetime
+        grades: List[str]
+        name: str
+    
+    @dataclass
+    class Grades:
+        beginDate: datetime
+        endDate: datetime
+        paginationData: PaginationData
+        lessons: List
+    
+    Grades.lessons: List[Lesson]
 
 
 class Announcements(list):
