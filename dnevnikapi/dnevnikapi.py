@@ -19,7 +19,7 @@ class Dnevnik(utils.APIHelper):
         self,
         login: Optional[str] = None,
         password: Optional[str] = None,
-        auto_logout=True,
+        auto_logout=False,
         auth_storage: Optional[AbstractStorage] = None
     ):
         """Login into account
@@ -27,8 +27,8 @@ class Dnevnik(utils.APIHelper):
         Args:
             login (`str`, optional): Defaults to `None`.
             password (`str`, optional): Defaults to `None`.
-            auto_logout (`bool`, optional): Revoke access hash but save refresh hash. Work if instance used in context manager. Defaults to `True`.
-            auth_storage (`AbstractStorage`, optional): Specify storage type. Defaults to `FileStorage` with login as name.
+            auto_logout (`bool`, optional): Revoke access hash but save refresh hash. Work if instance used in context manager. Defaults to `False`.
+            auth_storage (`AbstractStorage`, optional): Specify storage type. Defaults to `FileStorage` with login as filename.
         """
 
         if auth_storage is None:

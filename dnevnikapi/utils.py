@@ -5,7 +5,19 @@ from typing import Optional
 import requests
 
 
-def from_instance(cls, d):
+def from_instance(cls: object, d: dict):
+    """Recursively generate class instance from dictionary
+
+    Args:
+        cls (object): class to init
+        d (dict): dictionary with data for class
+
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        object: cls with fields filled using dictionary;
+    """
     try:
         fieldtypes = {f.name: f.type for f in fields(cls)}
         return cls(
