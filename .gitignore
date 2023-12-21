@@ -163,3 +163,4 @@ test.py
 pyproject.toml
 
 .vscode/
+*.data

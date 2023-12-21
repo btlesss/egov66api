@@ -1,15 +1,15 @@
 from dataclasses import dataclass
-from typing import Optional, List
-from enum import Enum
 from datetime import datetime
+from enum import Enum
+from typing import List, Optional
 
 ANY_SUBJECT = "00000000-0000-0000-0000-000000000000"
 
 @dataclass
 class AuthData:
-    accessToken: str = ""
-    refreshToken: str = ""
-    accessTokenExpirationDate: datetime = ""
+    accessToken: str
+    refreshToken: str
+    accessTokenExpirationDate: datetime
 
     def __post_init__(self):
         if not isinstance(self.accessTokenExpirationDate, datetime):

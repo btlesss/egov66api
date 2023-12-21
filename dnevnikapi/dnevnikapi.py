@@ -1,8 +1,17 @@
-from os import PathLike
-from typing import Union, Optional, List, overload
 from datetime import datetime, timedelta
-from .types import *
+from typing import List, Optional, Union
+
 from . import utils
+from .storage.abstract import AbstractStorage
+from .storage.file_storage import FileStorage
+from .types import (
+    ANY_SUBJECT,
+    Announcements,
+    AuthData,
+    AvailableStudents,
+    Period,
+    Student,
+)
 
 
 class Dnevnik(utils.APIHelper):
@@ -11,48 +20,42 @@ class Dnevnik(utils.APIHelper):
         login: Optional[str] = None,
         password: Optional[str] = None,
         auto_logout=True,
-        auth_data: Optional[AuthData] = None
+        auth_storage: Optional[AbstractStorage] = None
     ):
         """Login into account
-        One of (login, password) and auth_data (or only refreshToken) must be specified.
 
         Args:
-            login (str, optional): Defaults to None.
-            password (str, optional): Defaults to None.
-            auto_logout (bool, optional): If using in context manager. Defaults to True.
-            auth_data (AuthData, optional): Defaults to None.
+            login (`str`, optional): Defaults to `None`.
+            password (`str`, optional): Defaults to `None`.
+            auto_logout (`bool`, optional): Revoke access hash but save refresh hash. Work if instance used in context manager. Defaults to `True`.
+            auth_storage (`AbstractStorage`, optional): Specify storage type. Defaults to `FileStorage` with login as name.
         """
 
+        if auth_storage is None:
+            auth_storage = FileStorage(f"{login}.data")
         self.auto_logout = auto_logout
-        self.student = None
-        self.student: Optional[Student]
-        self.auth_data: AuthData
+        self.auth_storage = auth_storage
+        self.student: Optional[Student] = None
 
         super().__init__()
 
-        if auth_data:
-            self.auth_data = auth_data
-            tz = self.auth_data.accessTokenExpirationDate.tzinfo
-            if self.auth_data.accessTokenExpirationDate < datetime.now(tz = tz):
-                self.refresh()
-        else:
+        if self.auth_storage.refresh_token is None:
             if login is None or password is None:
-                raise ValueError("Login and password must be specified if no auth_data")
+                raise ValueError("Login and password must be specified if auth_storage is empty")
 
             r = self._call_post(
                 "/auth/Auth/Login", {"login": login, "password": password}
             )
-            self.auth_data = utils.from_instance(AuthData, r)
+            self.auth_storage.update_auth_data(utils.from_instance(AuthData, r))
+        elif not self.auth_storage.access_token or self.auth_storage.is_expired():
+            self.refresh()
         
-        self._update_access_token()
+        self.update_access_token(self.auth_storage.access_token)
 
         r = utils.from_instance(AvailableStudents, self._call_get("/students"))
         self.available_students = r.students
         self.is_parent = r.isParent
         self.student = self.available_students[0]
-
-    def _update_access_token(self):
-        super().update_access_token(self.auth_data.accessToken)
 
     def __enter__(self):
         return self
@@ -60,28 +63,32 @@ class Dnevnik(utils.APIHelper):
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.auto_logout:
             self.revoke()
+        
+        self.auth_storage.close()
 
     def revoke(self):
-        if not self.auth_data:
+        if not self.auth_storage.refresh_token:
             return
-
+        self.auth_storage.remove_access_token()
         self._call_post(
-            "/auth/Token/Revoke", {"refreshToken": self.auth_data.refreshToken}
+            "/auth/Token/Revoke", {"refreshToken": self.auth_storage.refresh_token}
         )
 
     def refresh(self, refresh_token: str = ""):
         """Get new accessToken using old refreshToken
 
         Args:
-            refresh_token (str, optional): Must be specified if no auth data. Defaults to auth_data.refreshToken.
+            refresh_token (str, optional): Must be specified if no auth data. Defaults to auth_storage.refresh_token.
         """
-        if not (refresh_token or self.auth_data):
+        if not (refresh_token or self.auth_storage.refresh_token):
             raise ValueError("No refresh token")
+
         r = self._call_post(
-                "/auth/Token/Refresh", {"refreshToken": self.auth_data.refreshToken or refresh_token}
-            )
-        self.auth_data = utils.from_instance(AuthData, r)
-        self._update_access_token()
+            "/auth/Token/Refresh",
+            {"refreshToken": self.auth_storage.refresh_token or refresh_token}
+        )
+        self.auth_storage.update_auth_data(utils.from_instance(AuthData, r))
+        self.update_access_token(self.auth_storage.access_token)
 
     def get_estimate_periods(self) -> List[Period]:
         r = self._call_get(
@@ -94,7 +101,8 @@ class Dnevnik(utils.APIHelper):
 
         return result
 
-    def get_estimate(self, period: str, year: Optional[int] = None):
+    def get_estimate(self, period: str, year: Optional[int] = None,
+                     mounth: str = ANY_SUBJECT, subject: str = ANY_SUBJECT):
         if year is None:
             year = datetime.today().year
 
@@ -104,8 +112,8 @@ class Dnevnik(utils.APIHelper):
                 "studentId": self.student.id,
                 "schoolYear": year,
                 "periodId": period,
-                "monthId": "00000000-0000-0000-0000-000000000000",
-                "subjectId": "00000000-0000-0000-0000-000000000000",
+                "monthId": mounth,
+                "subjectId": subject,
             },
         )
         return r
